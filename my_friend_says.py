@@ -24,8 +24,6 @@ def check_lmt(uid): #次数限制
     flmt_g = hoshino.util.FreqLimiter(0)
     if uid in hoshino.config.SUPERUSERS:
         return 0, ''
-    if uid in hoshino.config.MANAGERS:
-        return 0, ''
     if not tlmt.check(uid):
         return 1, "您今天已经呼叫过10次朋友了,朋友累了,请明天再来!"
     tlmt.increase(uid,1)
