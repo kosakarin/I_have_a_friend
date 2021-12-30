@@ -29,33 +29,79 @@ def check_lmt(uid): #次数限制
     tlmt.increase(uid,1)
     return 0, ''
 
-async def get_group_owener_id(bot, group_id): #获取群主qq
-    _member_list = await bot.get_group_member_list(group_id = group_id)
-    for member in _member_list:
-        if member["role"] == "owner":
-            _member = member
-            break
-    return _member['user_id']
-     
-async def get_group_admin_id(bot, group_id): #获取管理qq
-    _member_list = await bot.get_group_member_list(group_id = group_id)
-    member_list = []
-    for member in _member_list:
-        if member['role'] == 'admin':
-            member_list.append(member)
-    _member = random.choice(member_list)
-    return _member['user_id']
+async def member_list_load(bot,gid):
+    _list = await bot.get_group_member_list(group_id = gid)
+    return _list
 
-async def get_group_member_id(bot, group_id, sex): #获取qq号列表，排除掉长时间（大约30天）不活跃的群友
-    _member_list = await bot.get_group_member_list(group_id = group_id)
-    member_list = []
-    now = time.time()
-    for member in _member_list:
-        if sex == '' or sex == member['sex'] or member['sex'] == 'unknown':
+class IDloader:
+    def __init__(self, bot, ev, member_list, mode=1):
+        self.group_id = ev.group_id
+        self.member_list = member_list
+        self.owner_id = self.get_group_owener_id()
+        self.admin_list = self.get_group_admin_id()
+        self.active_member_list = self.get_group_member_id()
+        self.at_qq, self.at_name = self.load_at(ev)
+        if mode == 1:
+            self.text = self.load_text_prefix(ev)
+        elif mode == 2:
+            self.text = self.load_text_match(ev)
+
+    def get_group_owener_id(self): #获取群主qq
+        for member in self.member_list:
+            if member["role"] == "owner":
+                return member['user_id']
+        else:
+            return None
+    
+    def get_group_admin_id(self): #获取管理qq
+        member_list = []
+        for member in self.member_list:
+            if member['role'] == 'admin':
+                member_list.append(member['user_id'])
+        return member_list
+    
+    def get_group_member_id(self): #获取qq号列表，排除掉长时间（大约30天）不活跃的群友
+        member_list = []
+        now = time.time()
+        for member in self.member_list:
             if now - member['last_sent_time'] < 2500000:
                 member_list.append(member)
-    _member = random.choice(member_list)
-    return _member['user_id']
+        return member_list
+        
+    def choice_random_member(self, sex=''): #根据性别随机获得群员qq
+        temp = []
+        for member in self.active_member_list:
+            if sex == '' or sex == member['sex'] or member['sex'] == 'unknown':
+                temp.append(member['user_id'])
+        return random.choice(temp)
+       
+    def load_at(self, ev): #从消息中提取at信息
+        try:
+            for msg in ev.message:
+                if msg.type == 'at':
+                    uid = int(msg.data['qq'])
+                    for member in self.member_list:
+                        if member['user_id'] == uid:
+                            name = member['card'] if member['card'] else member['nickname']
+                            break
+                    return uid, name
+            else:
+                return None, None
+        except Exception as e:
+            print(repr(e))
+            return None, None
+    
+    def load_text_match(self, ev):
+        match = ev.match
+        self.name = str.strip(ev['match'].group(1))
+        if not self.at_qq:
+            for member in self.member_list:
+                if (member['card'] and member['card'] == self.name) or member['nickname'] == self.name:
+                    self.at_qq = member['user_id']
+        return str.strip(ev['match'].group(2))
+        
+    def load_text_prefix(self, ev):
+        return ev.message.extract_plain_text().strip()
         
 async def request_img(uid):
     response = await hoshino.aiorequests.get(f' http://q1.qlogo.cn/g?b=qq&nk={uid}&s=100', headers=headers)
@@ -158,7 +204,6 @@ def sex_get(text):
 
     return sex, _text
 
-
 @sv.on_prefix('我朋友说')
 async def my_friend_say(bot, ev):
     user_id = ev.user_id
@@ -166,24 +211,15 @@ async def my_friend_say(bot, ev):
     if flag:
         await bot.send(ev, msg, at_sender = True)
         return
-    gid = ev.group_id
-    uid = 0
-    text = ''
-    for msg in ev.message:
-        if msg.type == 'at':
-            uid = msg.data['qq']
-            continue
-        elif msg.type == 'text':
-            text = msg.data['text'].strip()
-    if text == '':
+    member_list = await member_list_load(bot,ev.group_id)
+    info = IDloader(bot, ev, member_list, 1)
+    if info.text == '':
         return
     else:
-        sex, text = sex_get(text)
-    if uid == 0:
-        uid = await get_group_member_id(bot, gid, sex)
+        sex, text = sex_get(info.text)
+        uid = info.at_qq if info.at_qq else info.choice_random_member(sex)
     msg = await make_pic(uid,text,'朋友')
     await bot.send(ev, msg)
-    
 
 @sv.on_rex(r'^(.*)酱说(.*)')
 async def group_owner_say(bot, ev):
@@ -192,18 +228,21 @@ async def group_owner_say(bot, ev):
     if flag:
         await bot.send(ev, msg, at_sender = True)
         return
-    gid = ev.group_id
-    name = str.strip(ev['match'].group(1))
-    text = str.strip(ev['match'].group(2))
+    member_list = await member_list_load(bot,ev.group_id)
+    info = IDloader(bot, ev, member_list, 2)
+    name = info.name if info.name else info.at_name
+    text = info.text
     if text == '':
         return
     else:
         sex, text = sex_get(text)
-    if name == '群主':
-        uid = await get_group_owener_id(bot, gid)
+    if info.at_qq:
+        uid = info.at_qq
+    elif name == '群主':
+        uid = info.owner_id
     elif name == '管理':
-        uid = await get_group_admin_id(bot, gid)
+        uid = random.choice(info.admin_list)
     else:
-        uid = await get_group_member_id(bot, gid, sex)
+        uid = info.choice_random_member(sex)
     msg = await make_pic(uid,text,name)
     await bot.send(ev, msg)
