@@ -6,7 +6,7 @@ from io import BytesIO
 
 sv = Service('我有一个朋友', help_='''
 我朋友说[@xx]xxxxxxx
-xx酱说xxxxxx
+[@xx]xx酱说xxxxxx
 '''.strip())
 headers = {"User-Agent": "Mozilla/5.0 (Windows; U; Windows NT 5.1; zh-CN; rv:1.9.1.6) ",
            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -17,7 +17,9 @@ fontpath = os.path.join(os.path.dirname(__file__), 'msyh.ttc')
 head_path = os.path.join(os.path.dirname(__file__), '1.png')
 body_path = os.path.join(os.path.dirname(__file__), '2.png')
 end_path = os.path.join(os.path.dirname(__file__), '3.png')
-
+short_path_left = os.path.join(os.path.dirname(__file__), 'talk_short_left.png')
+short_path_right = os.path.join(os.path.dirname(__file__), 'talk_short_right.png')
+short_path_head_img = os.path.join(os.path.dirname(__file__), 'talk_head_img.png')
 tlmt = hoshino.util.DailyNumberLimiter(10)
 
 def check_lmt(uid): #次数限制
@@ -116,7 +118,16 @@ def strQ2B(c):  #全角全部强制转半角（懒得处理全角符号的长度
     elif 65281 <= _c <= 65374:
         _c -= 65248
     return chr(_c)
-
+    
+def get_text_len(text):
+    len_ = 0
+    for i in text:
+        if '\u4e00' <= i <= '\u9fff':
+            len_ += 50
+        else:
+            len_ += 26
+    return len_
+    
 def remake_text(text): #对文本重新分行
     temp = ''
     len_ = 0
@@ -147,25 +158,37 @@ async def make_pic(uid,text,name):
     font = ImageFont.truetype(fontpath, 48)
     font_name = ImageFont.truetype(fontpath, 42)
     
-    head = Image.open(head_path)
-    draw = ImageDraw.Draw(head)
-    draw.text((220, 18), name, font = font_name, fill = (123,128,140))
-    
-    body = Image.open(body_path)
-    end = Image.open(end_path)
-    
     text_list = remake_text(text)
     icon = await request_img(uid)
-    
-    wa = head.size[0]
+    wa = 1079  #这个就是旧版3张图片的长度
     ha = 205 + len(text_list) * 53
-    
-    i = Image.new('RGB', (wa, ha), color=(255, 255, 255))
+    i = Image.new('RGB', (wa, ha), color=(234, 237, 244))
     i.paste(icon,(40,27))
+    
     if len(text_list) == 1:
-        i.paste(end,(0,ha-end.size[1]))
-        i.paste(head,(0,0),head)
+        len_ = get_text_len(text)
+        draw = ImageDraw.Draw(i)
+        draw.text((220, 18), name, font = font_name, fill = (123,128,140))
+        left = Image.open(short_path_left)
+        right = Image.open(short_path_right)
+        head_img = Image.open(short_path_head_img)
+        if len_ > 60:
+            body = Image.new('RGB', ((len_ - 60), 125), color=(255, 255, 255))
+            i.paste(head_img,(0,0),head_img)
+            i.paste(left,(182,95),left)
+            i.paste(body,(267,96))
+            i.paste(right,(257 + (len_ - 59),95),right)
+        else:
+            i.paste(head_img,(0,0),head_img)
+            i.paste(left,(182,95),left)
+            i.paste(right,(257,95),right)
     else:
+        head = Image.open(head_path)
+        draw = ImageDraw.Draw(head)
+        draw.text((220, 18), name, font = font_name, fill = (123,128,140))
+    
+        body = Image.open(body_path)
+        end = Image.open(end_path)
         body = body.resize((wa,ha-head.size[1]-end.size[1]), Image.ANTIALIAS)
         i.paste(head,(0,0),head)
         i.paste(body,(0,head.size[1]))
@@ -174,12 +197,12 @@ async def make_pic(uid,text,name):
     for j in range(len(text_list)):
         text = text_list[j]
         draw.text((padding[0], padding[1] + 53 * j), text, font = font, fill = (0, 0, 0))
-
+        
     buf1 = BytesIO()
     i.save(buf1, format='PNG')
     base64_str1 = f'base64://{base64.b64encode(buf1.getvalue()).decode()}'
     msg1 = f'''[CQ:image,file={base64_str1}]'''
-    
+
     return msg1
 
 def sex_get(text):
