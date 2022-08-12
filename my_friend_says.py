@@ -112,27 +112,68 @@ async def request_img(uid):
     return image
 
 def strQ2B(c):  #全角全部强制转半角（懒得处理全角符号的长度了）
+    if c == '\u200b':
+        return ' '
     _c = ord(c)
     if _c == 12288:
         _c = 32
     elif 65281 <= _c <= 65374:
         _c -= 65248
     return chr(_c)
-    
+
+def get_char_len(i):
+        if '\u4e00' <= i <= '\u9fff' or i in ['、','—','“','”','《','》','【','】','。','@']:
+            return 50
+        else:
+            return 26
+
 def get_text_len(text):
     len_ = 0
     for i in text:
-        if '\u4e00' <= i <= '\u9fff':
-            len_ += 50
-        else:
-            len_ += 26
+        len_ += get_char_len(i)
+
     return len_
-    
-def remake_text(text): #对文本重新分行
+
+def is_en(i):
+    if '\u0061' <= i <= '\u007A' or '\u0041' <= i <= '\u005A':
+        return 1
+    else:
+        return 0
+
+def remake_text(text): #对文本重新分行 
     temp = ''
+    word_temp = ''
     len_ = 0
     text_list = []
     for i in text:
+        if is_en(i): #保证英语单词不被分割
+            word_temp += i
+            continue
+        elif word_temp != '':
+            word_len = 26 * len(word_temp)
+            if word_len >= 650:  #本身大于一行，无视整词规则，重新分割；
+                char_len = 26
+                for i_ in word_temp:
+                    if len_ + char_len >= 650:
+                        text_list.append(temp)
+                        len_ = 0
+                        temp = i_
+                    else:
+                        len_ += char_len
+                        temp += i_
+                else:
+                    word_temp = ''
+            elif word_len + len_ >= 650:
+                text_list.append(temp)
+                len_ = word_len
+                temp = word_temp
+                word_temp = ''
+            else:
+                temp += word_temp
+                word_temp = ''
+                len_ += word_len
+                
+        #触发elif后 当前字符还未操作，继续操作
         if i == '\n':
             text_list.append(temp)
             len_ = 0
@@ -140,15 +181,16 @@ def remake_text(text): #对文本重新分行
             continue
         else:
             i = strQ2B(i)
-            temp += i
-        if '\u4e00' <= i <= '\u9fff':
-            len_ += 50
-        else:
-            len_ += 26
-        if len_ >= 611:
+            
+        char_len = get_char_len(i)
+        
+        if len_ + char_len >= 650:
             text_list.append(temp)
             len_ = 0
-            temp = ''
+            temp = i
+        else:
+            len_ += char_len
+            temp += i
     if temp != '':
         text_list.append(temp)
     return text_list
