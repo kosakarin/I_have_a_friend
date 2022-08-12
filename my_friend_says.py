@@ -191,6 +191,28 @@ def remake_text(text): #对文本重新分行
         else:
             len_ += char_len
             temp += i
+    else:
+        if word_temp != '':
+            word_len = 26 * len(word_temp)
+            if word_len >= 650:  #本身大于一行，无视整词规则，重新分割；
+                char_len = 26
+                for i_ in word_temp:
+                    if len_ + char_len >= 650:
+                        text_list.append(temp)
+                        len_ = 0
+                        temp = i_
+                    else:
+                        len_ += char_len
+                    temp += i_
+                else:
+                    word_temp = ''
+            elif word_len + len_ >= 650:
+                text_list.append(temp)
+                temp = word_temp
+            else:
+                temp += word_temp
+
+    
     if temp != '':
         text_list.append(temp)
     return text_list
