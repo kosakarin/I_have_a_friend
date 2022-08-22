@@ -21,6 +21,7 @@ short_path_left = os.path.join(os.path.dirname(__file__), 'talk_short_left.png')
 short_path_right = os.path.join(os.path.dirname(__file__), 'talk_short_right.png')
 short_path_head_img = os.path.join(os.path.dirname(__file__), 'talk_head_img.png')
 tlmt = hoshino.util.DailyNumberLimiter(10)
+max_len = 651
 
 def check_lmt(uid): #次数限制
     flmt_g = hoshino.util.FreqLimiter(0)
@@ -151,19 +152,19 @@ def remake_text(text): #对文本重新分行
             continue
         elif word_temp != '':
             word_len = 26 * len(word_temp)
-            if word_len >= 650:  #本身大于一行，无视整词规则，重新分割；
+            if word_len >= max_len:  #本身大于一行，无视整词规则，重新分割；
                 char_len = 26
                 for i_ in word_temp:
-                    if len_ + char_len >= 650:
+                    if len_ + char_len >= max_len:
                         text_list.append(temp)
-                        len_ = 0
+                        len_ = char_len
                         temp = i_
                     else:
                         len_ += char_len
                         temp += i_
                 else:
                     word_temp = ''
-            elif word_len + len_ >= 650:
+            elif word_len + len_ >= max_len:
                 text_list.append(temp)
                 len_ = word_len
                 temp = word_temp
@@ -184,9 +185,9 @@ def remake_text(text): #对文本重新分行
             
         char_len = get_char_len(i)
         
-        if len_ + char_len >= 650:
+        if len_ + char_len >= max_len:
             text_list.append(temp)
-            len_ = 0
+            len_ = char_len
             temp = i
         else:
             len_ += char_len
@@ -194,19 +195,19 @@ def remake_text(text): #对文本重新分行
     else:
         if word_temp != '':
             word_len = 26 * len(word_temp)
-            if word_len >= 650:  #本身大于一行，无视整词规则，重新分割；
+            if word_len >= max_len:  #本身大于一行，无视整词规则，重新分割；
                 char_len = 26
                 for i_ in word_temp:
-                    if len_ + char_len >= 650:
+                    if len_ + char_len >= max_len:
                         text_list.append(temp)
-                        len_ = 0
+                        len_ = char_len
                         temp = i_
                     else:
                         len_ += char_len
                     temp += i_
                 else:
                     word_temp = ''
-            elif word_len + len_ >= 650:
+            elif word_len + len_ >= max_len:
                 text_list.append(temp)
                 temp = word_temp
             else:
@@ -216,7 +217,6 @@ def remake_text(text): #对文本重新分行
     if temp != '':
         text_list.append(temp)
     return text_list
-
 async def make_pic(uid,text,name):
     padding = [230,120]
     font = ImageFont.truetype(fontpath, 48)
